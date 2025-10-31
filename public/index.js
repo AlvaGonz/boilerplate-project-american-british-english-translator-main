@@ -12,8 +12,17 @@ const translateHandler = async () => {
   translatedArea.style.opacity = "0";
   
   // Validate input
-  if (!textArea.value.trim()) {
+  const inputText = textArea.value.trim();
+  if (!inputText) {
     errorArea.innerText = "Please enter some text to translate.";
+    errorArea.style.display = "block";
+    return;
+  }
+
+  // Validate input length (DoS protection on client side)
+  const MAX_TEXT_LENGTH = 10000;
+  if (inputText.length > MAX_TEXT_LENGTH) {
+    errorArea.innerText = `Text exceeds maximum length of ${MAX_TEXT_LENGTH} characters.`;
     errorArea.style.display = "block";
     return;
   }
@@ -23,8 +32,8 @@ const translateHandler = async () => {
   translateBtn.style.opacity = "0.6";
   translateBtn.style.cursor = "not-allowed";
   
-  // Show loading state
-  translatedArea.innerHTML = '<span style="color: #666;">Translating...</span>';
+  // Show loading state (safe HTML)
+  translatedArea.textContent = "Translating...";
   translatedArea.style.opacity = "1";
 
   // Activate cable pulse animation
@@ -35,44 +44,66 @@ const translateHandler = async () => {
 
   let translationSuccess = false;
   try {
-    const data = await fetch("/api/translate", {
+    const response = await fetch("/api/translate", {
       method: "POST",
       headers: {
         "Accept": "application/json",
         "Content-type": "application/json"
       },
       body: JSON.stringify({
-        "text": textArea.value, 
+        "text": inputText, 
         "locale": localeArea.value
       })
     });
 
-    const parsed = await data.json();
+    // Check if response is ok
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const parsed = await response.json();
     
     if (parsed.error) {
-      errorArea.innerText = parsed.error;
+      errorArea.textContent = parsed.error;
       errorArea.style.display = "block";
-      translatedArea.innerHTML = "";
+      translatedArea.textContent = "";
       translatedArea.style.opacity = "0";
-    } else {
-      translatedArea.innerHTML = parsed.translation || "Everything looks good to me!";
+    } else if (parsed.translation) {
+      // Use innerHTML since the translation already contains sanitized HTML from the server
+      // The server-side translator already sanitizes the content
+      translatedArea.innerHTML = parsed.translation;
       translatedArea.style.opacity = "1";
       errorArea.style.display = "none";
       translationSuccess = true;
       
       // Smooth scroll to result
       setTimeout(() => {
-        document.getElementById("solution-container").scrollIntoView({ 
-          behavior: "smooth", 
-          block: "nearest" 
-        });
+        const solutionContainer = document.getElementById("solution-container");
+        if (solutionContainer) {
+          solutionContainer.scrollIntoView({ 
+            behavior: "smooth", 
+            block: "nearest" 
+          });
+        }
       }, 100);
+    } else {
+      throw new Error("Invalid response format");
     }
   } catch (error) {
-    errorArea.innerText = "An error occurred. Please try again.";
+    // Differentiate error types
+    let errorMessage = "An error occurred. Please try again.";
+    
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      errorMessage = "Network error. Please check your connection.";
+    } else if (error.message.includes('HTTP error')) {
+      errorMessage = "Server error. Please try again later.";
+    }
+    
+    errorArea.textContent = errorMessage;
     errorArea.style.display = "block";
-    translatedArea.innerHTML = "";
+    translatedArea.textContent = "";
     translatedArea.style.opacity = "0";
+    console.error('Translation error:', error);
   } finally {
     // Re-enable button
     translateBtn.disabled = false;
@@ -92,12 +123,18 @@ const translateHandler = async () => {
 };
 
 // Add Enter key support for textarea (Ctrl+Enter to translate)
-document.getElementById("text-input").addEventListener("keydown", (e) => {
-  if (e.ctrlKey && e.key === "Enter") {
-    e.preventDefault();
-    translateHandler();
-  }
-});
+const textInput = document.getElementById("text-input");
+if (textInput) {
+  textInput.addEventListener("keydown", (e) => {
+    if (e.ctrlKey && e.key === "Enter") {
+      e.preventDefault();
+      translateHandler();
+    }
+  });
+}
 
 // Initialize event listener
-document.getElementById("translate-btn").addEventListener("click", translateHandler);
+const translateBtn = document.getElementById("translate-btn");
+if (translateBtn) {
+  translateBtn.addEventListener("click", translateHandler);
+}

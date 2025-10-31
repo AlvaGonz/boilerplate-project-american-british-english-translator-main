@@ -3,9 +3,40 @@ const americanToBritishSpelling = require('./american-to-british-spelling.js');
 const americanToBritishTitles = require("./american-to-british-titles.js")
 const britishOnly = require('./british-only.js')
 
+// Static function to reverse dictionary (called once at module load)
+function reverseDictionaryStatic(dict) {
+  const reversed = {};
+  Object.keys(dict).forEach(key => {
+    reversed[dict[key]] = key;
+  });
+  return reversed;
+}
+
+// Pre-calculate reversed dictionary for performance (execute once, not per request)
+const britishToAmericanSpelling = reverseDictionaryStatic(americanToBritishSpelling);
+const britishToAmericanTitles = reverseDictionaryStatic(americanToBritishTitles);
+
 class Translator {
+  constructor() {
+    // Maximum text length to prevent DoS attacks (10,000 characters)
+    this.MAX_TEXT_LENGTH = 10000;
+    
+    // Maximum regex iterations to prevent ReDoS
+    this.MAX_REGEX_ITERATIONS = 1000;
+  }
+
   translate(text, locale) {
     if (!text || !locale) {
+      return null;
+    }
+
+    // Validate input type
+    if (typeof text !== 'string' || typeof locale !== 'string') {
+      return null;
+    }
+
+    // Validate text length to prevent DoS
+    if (text.length > this.MAX_TEXT_LENGTH) {
       return null;
     }
 
@@ -34,8 +65,8 @@ class Translator {
       // Handle phrases/terms from british-only.js
       this.findPhraseTranslations(text, translations, britishOnly);
       
-      // Handle spelling differences (reverse the spelling dictionary)
-      this.findWordTranslations(text, translations, this.reverseDictionary(americanToBritishSpelling));
+      // Handle spelling differences (use pre-calculated reversed dictionary)
+      this.findWordTranslations(text, translations, britishToAmericanSpelling);
     }
 
     // If no translations were made, return "Everything looks good to me!"
@@ -57,23 +88,24 @@ class Translator {
 
     // Build result by applying translations from end to start
     // Build from original text, replacing sections one by one
-    let result = text;
     const parts = [];
     let lastIndex = text.length;
     
     // Process translations from end to start
     for (const { original, translated, index } of filteredTranslations) {
       // Add the part after this translation (if any)
+      // Sanitize user input text to prevent XSS
       if (index + original.length < lastIndex) {
         parts.unshift({
-          text: text.substring(index + original.length, lastIndex),
+          text: this.sanitizeHTML(text.substring(index + original.length, lastIndex)),
           isHighlight: false
         });
       }
       
-      // Add the highlighted translation
+      // Add the highlighted translation (text content is already safe from dictionaries)
+      // Only sanitize if somehow external content got through
       parts.unshift({
-        text: translated,
+        text: this.sanitizeHTML(translated),
         isHighlight: true
       });
       
@@ -81,9 +113,10 @@ class Translator {
     }
     
     // Add the part before all translations (if any)
+    // Sanitize user input text to prevent XSS
     if (lastIndex > 0) {
       parts.unshift({
-        text: text.substring(0, lastIndex),
+        text: this.sanitizeHTML(text.substring(0, lastIndex)),
         isHighlight: false
       });
     }
@@ -97,12 +130,30 @@ class Translator {
     }).join('');
   }
 
+  // Sanitize HTML to prevent XSS attacks
+  // Only escape characters that are dangerous when inserted into HTML body
+  // We don't need to escape quotes since we're using them in attributes already
+  sanitizeHTML(str) {
+    if (typeof str !== 'string') return '';
+    
+    // Escape in order: & must be first, then < and >
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    // Note: We don't escape quotes (", ') because they're safe in HTML body text
+    // Only dangerous in attribute values, but we're using them in tag attributes which already have quotes
+  }
+
   findTimeTranslations(text, translations, locale) {
     if (locale === 'american-to-british') {
       // Match time format HH:MM (e.g., 10:30, 12:15, 4:30)
       const timeRegex = /\b(\d{1,2}):(\d{2})\b/g;
       let match;
-      while ((match = timeRegex.exec(text)) !== null) {
+      let iterations = 0;
+      
+      while ((match = timeRegex.exec(text)) !== null && iterations < this.MAX_REGEX_ITERATIONS) {
+        iterations++;
         const original = match[0];
         const britishTime = original.replace(':', '.');
         translations.push({ 
@@ -110,12 +161,20 @@ class Translator {
           translated: britishTime,
           index: match.index
         });
+        
+        // Prevent infinite loop if regex doesn't advance
+        if (match.index === timeRegex.lastIndex && iterations > 1) {
+          break;
+        }
       }
     } else if (locale === 'british-to-american') {
       // Match time format HH.MM (e.g., 10.30, 12.15, 4.30)
       const timeRegex = /\b(\d{1,2})\.(\d{2})\b/g;
       let match;
-      while ((match = timeRegex.exec(text)) !== null) {
+      let iterations = 0;
+      
+      while ((match = timeRegex.exec(text)) !== null && iterations < this.MAX_REGEX_ITERATIONS) {
+        iterations++;
         const original = match[0];
         const americanTime = original.replace('.', ':');
         translations.push({ 
@@ -123,6 +182,11 @@ class Translator {
           translated: americanTime,
           index: match.index
         });
+        
+        // Prevent infinite loop if regex doesn't advance
+        if (match.index === timeRegex.lastIndex && iterations > 1) {
+          break;
+        }
       }
     }
   }
@@ -130,7 +194,7 @@ class Translator {
   findTitleTranslations(text, translations, locale) {
     const titleMap = locale === 'american-to-british' 
       ? americanToBritishTitles 
-      : this.reverseDictionary(americanToBritishTitles);
+      : britishToAmericanTitles;
 
     // Sort by length (longer first) to handle "prof." before "mr."
     const titles = Object.keys(titleMap).sort((a, b) => b.length - a.length);
@@ -139,19 +203,57 @@ class Translator {
     titles.forEach((americanTitle) => {
       const britishTitle = titleMap[americanTitle];
       // Match title followed by a space or end of string, case-insensitive
-      const regex = new RegExp(`\\b${this.escapeRegex(americanTitle)}(?=\\s|$)`, 'gi');
-      let match;
+      const regexPattern = `\\b${this.escapeRegex(americanTitle)}(?=\\s|$)`;
       
-      while ((match = regex.exec(text)) !== null) {
-        const index = match.index;
-        // Check if this index is already used
-        if (!usedIndices.has(index)) {
-          usedIndices.add(index);
-          translations.push({
-            original: match[0],
-            translated: this.preserveCase(match[0], britishTitle),
-            index: index
-          });
+      // Use matchAll for cleaner iteration
+      try {
+        const regex = new RegExp(regexPattern, 'gi');
+        const matches = [...text.matchAll(regex)];
+        
+        matches.forEach(match => {
+          const index = match.index;
+          // Check if this index is already used
+          if (!usedIndices.has(index)) {
+            usedIndices.add(index);
+            translations.push({
+              original: match[0],
+              translated: this.preserveCase(match[0], britishTitle),
+              index: index
+            });
+          }
+        });
+      } catch (e) {
+        // Fallback: use manual search with safety checks
+        let searchIndex = 0;
+        let iterations = 0;
+        
+        while (searchIndex < text.length && iterations < this.MAX_REGEX_ITERATIONS) {
+          iterations++;
+          const regex = new RegExp(regexPattern, 'gi');
+          regex.lastIndex = searchIndex;
+          const match = regex.exec(text);
+          
+          if (!match) break;
+          
+          // Prevent infinite loop if regex doesn't advance
+          if (match.index === searchIndex && searchIndex > 0) {
+            break;
+          }
+          
+          const index = match.index;
+          if (!usedIndices.has(index)) {
+            usedIndices.add(index);
+            translations.push({
+              original: match[0],
+              translated: this.preserveCase(match[0], britishTitle),
+              index: index
+            });
+          }
+          
+          searchIndex = match.index + match[0].length;
+          if (searchIndex <= match.index) {
+            searchIndex = match.index + 1;
+          }
         }
       }
     });
@@ -199,12 +301,20 @@ class Translator {
       } catch (e) {
         // Fallback for older Node versions
         let searchIndex = 0;
-        while (searchIndex < text.length) {
+        let iterations = 0;
+        
+        while (searchIndex < text.length && iterations < this.MAX_REGEX_ITERATIONS) {
+          iterations++;
           const regex = new RegExp(regexPattern, 'gi');
           regex.lastIndex = searchIndex;
           const match = regex.exec(text);
           
-          if (!match || match.index === searchIndex && searchIndex > 0) break;
+          if (!match) break;
+          
+          // Prevent infinite loop
+          if (match.index === searchIndex && searchIndex > 0) {
+            break;
+          }
           
           const index = match.index;
           const matchedText = match[0];
@@ -229,6 +339,9 @@ class Translator {
           }
           
           searchIndex = index + matchedText.length;
+          if (searchIndex <= index) {
+            searchIndex = index + 1;
+          }
         }
       }
     });
@@ -276,12 +389,20 @@ class Translator {
       } catch (e) {
         // Fallback for older Node versions
         let searchIndex = 0;
-        while (searchIndex < text.length) {
+        let iterations = 0;
+        
+        while (searchIndex < text.length && iterations < this.MAX_REGEX_ITERATIONS) {
+          iterations++;
           const regex = new RegExp(regexPattern, 'gi');
           regex.lastIndex = searchIndex;
           const match = regex.exec(text);
           
-          if (!match || match.index === searchIndex && searchIndex > 0) break;
+          if (!match) break;
+          
+          // Prevent infinite loop
+          if (match.index === searchIndex && searchIndex > 0) {
+            break;
+          }
           
           const index = match.index;
           const matchedText = match[0];
@@ -306,6 +427,9 @@ class Translator {
           }
           
           searchIndex = index + matchedText.length;
+          if (searchIndex <= index) {
+            searchIndex = index + 1;
+          }
         }
       }
     });
