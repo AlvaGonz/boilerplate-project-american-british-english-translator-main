@@ -45,6 +45,11 @@ class Translator {
 
     // Remove overlapping translations (keep the first one found)
     const filteredTranslations = this.removeOverlappingTranslations(translations);
+    
+    // If all translations were filtered out, return the message
+    if (filteredTranslations.length === 0) {
+      return "Everything looks good to me!";
+    }
 
     // Sort translations by index in reverse order to apply from end to start
     // This prevents index shifting when we insert HTML spans
@@ -159,29 +164,71 @@ class Translator {
 
     phrases.forEach((originalPhrase) => {
       const translatedPhrase = dictionary[originalPhrase];
-      const regex = new RegExp(`\\b${this.escapeRegex(originalPhrase)}\\b`, 'gi');
-      let match;
+      // Create regex pattern
+      const regexPattern = `\\b${this.escapeRegex(originalPhrase)}\\b`;
       
-      while ((match = regex.exec(text)) !== null) {
-        const index = match.index;
-        // Check if this range overlaps with already used indices
-        let overlaps = false;
-        for (let i = index; i < index + match[0].length; i++) {
-          if (usedIndices.has(i)) {
-            overlaps = true;
-            break;
-          }
-        }
+      // Use matchAll for cleaner iteration (Node 12+)
+      try {
+        const regex = new RegExp(regexPattern, 'gi');
+        const matches = [...text.matchAll(regex)];
         
-        if (!overlaps) {
-          for (let i = index; i < index + match[0].length; i++) {
-            usedIndices.add(i);
+        matches.forEach(match => {
+          const index = match.index;
+          const matchedText = match[0];
+          
+          // Check if this range overlaps with already used indices
+          let overlaps = false;
+          for (let i = index; i < index + matchedText.length; i++) {
+            if (usedIndices.has(i)) {
+              overlaps = true;
+              break;
+            }
           }
-          translations.push({
-            original: match[0],
-            translated: this.preserveCase(match[0], translatedPhrase),
-            index: index
-          });
+          
+          if (!overlaps) {
+            for (let i = index; i < index + matchedText.length; i++) {
+              usedIndices.add(i);
+            }
+            translations.push({
+              original: matchedText,
+              translated: this.preserveCase(matchedText, translatedPhrase),
+              index: index
+            });
+          }
+        });
+      } catch (e) {
+        // Fallback for older Node versions
+        let searchIndex = 0;
+        while (searchIndex < text.length) {
+          const regex = new RegExp(regexPattern, 'gi');
+          regex.lastIndex = searchIndex;
+          const match = regex.exec(text);
+          
+          if (!match || match.index === searchIndex && searchIndex > 0) break;
+          
+          const index = match.index;
+          const matchedText = match[0];
+          
+          let overlaps = false;
+          for (let i = index; i < index + matchedText.length; i++) {
+            if (usedIndices.has(i)) {
+              overlaps = true;
+              break;
+            }
+          }
+          
+          if (!overlaps) {
+            for (let i = index; i < index + matchedText.length; i++) {
+              usedIndices.add(i);
+            }
+            translations.push({
+              original: matchedText,
+              translated: this.preserveCase(matchedText, translatedPhrase),
+              index: index
+            });
+          }
+          
+          searchIndex = index + matchedText.length;
         }
       }
     });
@@ -194,29 +241,71 @@ class Translator {
 
     words.forEach((originalWord) => {
       const translatedWord = dictionary[originalWord];
-      const regex = new RegExp(`\\b${this.escapeRegex(originalWord)}\\b`, 'gi');
-      let match;
+      // Create regex pattern
+      const regexPattern = `\\b${this.escapeRegex(originalWord)}\\b`;
       
-      while ((match = regex.exec(text)) !== null) {
-        const index = match.index;
-        // Check if this range overlaps with already used indices
-        let overlaps = false;
-        for (let i = index; i < index + match[0].length; i++) {
-          if (usedIndices.has(i)) {
-            overlaps = true;
-            break;
-          }
-        }
+      // Use matchAll for cleaner iteration (Node 12+)
+      try {
+        const regex = new RegExp(regexPattern, 'gi');
+        const matches = [...text.matchAll(regex)];
         
-        if (!overlaps) {
-          for (let i = index; i < index + match[0].length; i++) {
-            usedIndices.add(i);
+        matches.forEach(match => {
+          const index = match.index;
+          const matchedText = match[0];
+          
+          // Check if this range overlaps with already used indices
+          let overlaps = false;
+          for (let i = index; i < index + matchedText.length; i++) {
+            if (usedIndices.has(i)) {
+              overlaps = true;
+              break;
+            }
           }
-          translations.push({
-            original: match[0],
-            translated: this.preserveCase(match[0], translatedWord),
-            index: index
-          });
+          
+          if (!overlaps) {
+            for (let i = index; i < index + matchedText.length; i++) {
+              usedIndices.add(i);
+            }
+            translations.push({
+              original: matchedText,
+              translated: this.preserveCase(matchedText, translatedWord),
+              index: index
+            });
+          }
+        });
+      } catch (e) {
+        // Fallback for older Node versions
+        let searchIndex = 0;
+        while (searchIndex < text.length) {
+          const regex = new RegExp(regexPattern, 'gi');
+          regex.lastIndex = searchIndex;
+          const match = regex.exec(text);
+          
+          if (!match || match.index === searchIndex && searchIndex > 0) break;
+          
+          const index = match.index;
+          const matchedText = match[0];
+          
+          let overlaps = false;
+          for (let i = index; i < index + matchedText.length; i++) {
+            if (usedIndices.has(i)) {
+              overlaps = true;
+              break;
+            }
+          }
+          
+          if (!overlaps) {
+            for (let i = index; i < index + matchedText.length; i++) {
+              usedIndices.add(i);
+            }
+            translations.push({
+              original: matchedText,
+              translated: this.preserveCase(matchedText, translatedWord),
+              index: index
+            });
+          }
+          
+          searchIndex = index + matchedText.length;
         }
       }
     });
