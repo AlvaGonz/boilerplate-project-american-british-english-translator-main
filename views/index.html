@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
 	<title>American/British English Translator</title>
@@ -17,29 +17,124 @@
 			American / British English Translator
 		</h1>
 	</header>
-	<hr style="margin: 25px" />
+	
 	<div class="container">
-		<div class="form-container">
+		<!-- Cable connection element -->
+		<svg class="cable-connection" viewBox="0 0 1200 200" preserveAspectRatio="none">
+			<!-- Cable path -->
+			<path 
+				id="cable-path" 
+				d="M 50 100 Q 300 50, 550 100 T 1050 100" 
+				stroke="#0066ff" 
+				stroke-width="3" 
+				fill="none"
+				class="cable-line"
+			/>
+			<!-- Animated pulse -->
+			<circle 
+				id="pulse-circle" 
+				r="8" 
+				fill="#00aaff" 
+				class="pulse"
+				opacity="0"
+			>
+				<animateMotion 
+					dur="2s" 
+					repeatCount="indefinite"
+					path="M 50 100 Q 300 50, 550 100 T 1050 100"
+				/>
+				<animate 
+					attributeName="opacity" 
+					values="0;1;1;0" 
+					dur="2s" 
+					repeatCount="indefinite"
+					begin="0s"
+				/>
+				<animate 
+					attributeName="r" 
+					values="4;10;4" 
+					dur="2s" 
+					repeatCount="indefinite"
+					begin="0s"
+				/>
+			</circle>
+			<!-- Secondary pulse -->
+			<circle 
+				id="pulse-circle-2" 
+				r="6" 
+				fill="#00aaff" 
+				class="pulse"
+				opacity="0"
+			>
+				<animateMotion 
+					dur="2s" 
+					repeatCount="indefinite"
+					path="M 50 100 Q 300 50, 550 100 T 1050 100"
+					begin="1s"
+				/>
+				<animate 
+					attributeName="opacity" 
+					values="0;1;1;0" 
+					dur="2s" 
+					repeatCount="indefinite"
+					begin="1s"
+				/>
+				<animate 
+					attributeName="r" 
+					values="3;8;3" 
+					dur="2s" 
+					repeatCount="indefinite"
+					begin="1s"
+				/>
+			</circle>
+		</svg>
+
+		<div class="form-container" id="input-container">
 			<textarea
-          rows="10"
-          cols="60"
-          id="text-input"
-        ></textarea>
-        <br />
-        <select id="locale-select">
-          <option value="american-to-british">American to British</option>
-          <option value="british-to-american">British to American</option>
-        </select>
-        <input type="button" value="Translate" id="translate-btn"/>
-      </div>
-      <div id="output-container">
-        <div id="solution-container">
-          Translated Sentence:
-          <div id="translated-sentence"></div>
-          <div id="error-msg"></div>
-        </div>
-      </div>
-    </div>
-  </body>
-  <script src="../public/index.js"></script>
+				rows="10"
+				cols="60"
+				id="text-input"
+				placeholder="Enter text to translate..."
+			></textarea>
+			
+			<select id="locale-select">
+				<option value="american-to-british">American to British</option>
+				<option value="british-to-american">British to American</option>
+			</select>
+			
+			<input type="button" value="Translate" id="translate-btn"/>
+		</div>
+		
+		<div id="output-container">
+			<div id="solution-container">
+				<div id="translated-sentence"></div>
+				<div id="error-msg"></div>
+			</div>
+		</div>
+	</div>
+
+	<!-- Word slide bar at bottom -->
+	<div class="word-slide-container">
+		<div class="word-slide-track">
+			<div class="word-slide-item">Translate</div>
+			<div class="word-slide-item">Convert</div>
+			<div class="word-slide-item">Transform</div>
+			<div class="word-slide-item">Adapt</div>
+			<div class="word-slide-item">Interpret</div>
+			<div class="word-slide-item">Localize</div>
+			<div class="word-slide-item">Bridge</div>
+			<div class="word-slide-item">Connect</div>
+			<div class="word-slide-item">Exchange</div>
+			<div class="word-slide-item">Translate</div>
+			<div class="word-slide-item">Convert</div>
+			<div class="word-slide-item">Transform</div>
+			<div class="word-slide-item">Adapt</div>
+			<div class="word-slide-item">Interpret</div>
+			<div class="word-slide-item">Localize</div>
+		</div>
+	</div>
+	
+	<script src="../public/index.js"></script>
+</body>
+
 </html>
